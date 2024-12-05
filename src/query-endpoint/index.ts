@@ -33,10 +33,15 @@ export default defineEndpoint((router, { database }) => {
       const { query, parameters } = req.body;
       if (!query) throw new Error("No query specified");
 
-      const queries = query.split(";\n");
+      const queries = query.trim().split(";\n");
       let data = null;
       for (const query of queries) {
-        data = await database.raw(query, parameters || {});
+        try {
+          data = await database.raw (query, parameters || {}); 
+        }
+        catch (e: any) {
+          console.error({level: "error", message: "Query failed", query: query, error: e.message })
+        }
       }
 
       res.setHeader("Content-Type", "application/json");
