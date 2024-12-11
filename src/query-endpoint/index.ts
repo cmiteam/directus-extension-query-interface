@@ -30,17 +30,23 @@ export default defineEndpoint((router, { database }) => {
 
     try {
       // Execute the query
-      const { query, parameters } = req.body;
-      if (!query) throw new Error("No query specified");
+      const { query: querySet, parameters } = req.body;
+      if (!querySet) throw new Error("No query specified");
 
-      const queries = query.trim().split(";\n");
+      const queries = querySet.trim().split(";\n");
       let data = null;
+      const decodeSpecialMarkers = (text: string) =>
+        text.replace(/\[SEMICOLON\]/g, ";").replace(/\[NEWLINE\]/g, "\n");
+      
       for (const query of queries) {
+        let decodedQuery = decodeSpecialMarkers(query);
         try {
-          data = await database.raw (query, parameters || {}); 
+          data = await database.raw (decodedQuery, parameters || {}); 
         }
         catch (e: any) {
-          console.error({level: "error", message: "Query failed", query: query, error: e.message })
+          if (!e.message.match(/SQLITE_CONSTRAINT: UNIQUE constraint failed:.*_id$/)) {
+            console.error({level: "error", message: "Query failed", query: decodedQuery, error: e.message })
+          }
         }
       }
 
