@@ -44,7 +44,7 @@ export default defineEndpoint((router, { database }) => {
           data = await database.raw (decodedQuery, parameters || {}); 
         }
         catch (e: any) {
-          if (!e.message.match(/SQLITE_CONSTRAINT: UNIQUE constraint failed:.*_id$/)) {
+          if (!e.message.match(/SQLITE_CONSTRAINT: UNIQUE constraint failed:.*id$/)) {
             console.error({level: "error", message: "Query failed", query: decodedQuery, error: e.message })
           }
         }
