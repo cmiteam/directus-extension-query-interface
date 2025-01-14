@@ -1,4 +1,5 @@
 import { defineEndpoint } from "@directus/extensions-sdk";
+import SqlString from "sqlstring";
 
 export default defineEndpoint((router, { database }) => {
   router.post("/", async (req, res) => {
@@ -36,10 +37,19 @@ export default defineEndpoint((router, { database }) => {
       const queries = querySet.trim().split(";\n");
       let data = null;
       const decodeSpecialMarkers = (text: string) =>
-        text.replace(/\[SEMICOLON\]/g, ";").replace(/\[NEWLINE\]/g, "\n");
+        text.replace(/\[SEMICOLON\]/g, ";");
+      const escapeStringLiterals = (query: string): string => {
+        // Regex to match content within single quotes
+        return query.replace(/'([^']*)'/g, (match, p1) => {
+          const unescapedString = p1.replace(/\\n/g, '\n'); // Convert "\n" into actual newlines
+          return SqlString.escape(unescapedString); // Escape the string to handle special characters
+        });
+      };
       
       for (const query of queries) {
         let decodedQuery = decodeSpecialMarkers(query);
+        decodedQuery = escapeStringLiterals(decodedQuery);
+
         try {
           data = await database.raw (decodedQuery, parameters || {}); 
         }
