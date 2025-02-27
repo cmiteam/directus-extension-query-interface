@@ -35,30 +35,47 @@ export default defineEndpoint((router, { database }) => {
       if (!querySet) throw new Error("No query specified");
 
       const queries = querySet.trim().split(";\n");
+      const totalQueries = queries.length;
+      console.log(`Executing ${totalQueries} queries...`);
+
+      const progressInterval = Math.max(1, Math.floor(totalQueries / 100)); // Limit to ~100 dots max
+      let progressDots = "";
+
       let data = null;
       const decodeSpecialMarkers = (text: string) =>
         text.replace(/\[SEMICOLON\]/g, ";");
+
       const escapeStringLiterals = (query: string): string => {
-        // Regex to match content within single quotes
         return query.replace(/'([^']*)'/g, (match, p1) => {
-          const unescapedString = p1.replace(/\\n/g, '\n'); // Convert "\n" into actual newlines
-          return SqlString.escape(unescapedString); // Escape the string to handle special characters
+          const unescapedString = p1.replace(/\\n/g, '\n');
+          return SqlString.escape(unescapedString);
         });
       };
-      
-      for (const query of queries) {
-        let decodedQuery = decodeSpecialMarkers(query);
+
+      console.log('Executing ', totalQueries, 'queries...');
+      for (let i = 0; i < totalQueries; i++) {
+        let decodedQuery = decodeSpecialMarkers(queries[i]);
         decodedQuery = escapeStringLiterals(decodedQuery);
 
         try {
-          data = await database.raw (decodedQuery, parameters || {}); 
-        }
-        catch (e: any) {
+          data = await database.raw(decodedQuery, parameters || {});
+        } catch (e: any) {
           if (!e.message.match(/SQLITE_CONSTRAINT: UNIQUE constraint failed:.*id$/)) {
-            console.error({level: "error", message: "Query failed", query: decodedQuery, error: e.message })
+            console.error(`\n[ERROR] Query failed:\n${decodedQuery}\n${e.message}\n`);
           }
         }
+
+        // Update progress bar every 'progressInterval' queries
+
+        if ((i + 1) % progressInterval === 0) {
+          progressDots += "."; // Add a dot
+          process.stdout.write('\x1b[0G'); // Move cursor to start
+          process.stdout.write(progressDots); // Overwrite
+          process.stdout.write(''); // Try to force flush
+        }
       }
+
+      console.log("\nExecution completed."); // Final message
 
       res.setHeader("Content-Type", "application/json");
       res.status(200);
