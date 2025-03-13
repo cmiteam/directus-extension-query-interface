@@ -1,5 +1,9 @@
 import { defineEndpoint } from "@directus/extensions-sdk";
 import SqlString from "sqlstring";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 export default defineEndpoint((router, { database }) => {
   router.post("/", async (req, res) => {
@@ -38,9 +42,6 @@ export default defineEndpoint((router, { database }) => {
       const totalQueries = queries.length;
       console.log(`Executing ${totalQueries} queries...`);
 
-      const progressInterval = Math.max(1, Math.floor(totalQueries / 100)); // Limit to ~100 dots max
-      let progressDots = "";
-
       let data = null;
       const decodeSpecialMarkers = (text: string) =>
         text.replace(/\[SEMICOLON\]/g, ";");
@@ -52,29 +53,42 @@ export default defineEndpoint((router, { database }) => {
         });
       };
 
-      console.log('Executing ', totalQueries, 'queries...');
-      for (let i = 0; i < totalQueries; i++) {
-        let decodedQuery = decodeSpecialMarkers(queries[i]);
-        decodedQuery = escapeStringLiterals(decodedQuery);
-
+      // Knex is too slow for bulk deletes, so we use the SQLite CLI
+      const deleteViaCli = async (deleteCommand: string): Promise<void> =>{
+        const dbPath = '/directus/persist/database/eventus.sqlite';
+        const command = `sqlite3 ${dbPath} "${deleteCommand}"`;
+      
         try {
-          data = await database.raw(decodedQuery, parameters || {});
-        } catch (e: any) {
-          if (!e.message.match(/SQLITE_CONSTRAINT: UNIQUE constraint failed:.*id$/)) {
-            console.error(`\n[ERROR] Query failed:\n${decodedQuery}\n${e.message}\n`);
+          const { stdout, stderr } = await execAsync(command);
+          if (stderr) {
+            console.error(`[CLI ERROR] ${stderr}`);
           }
-        }
-
-        // Update progress bar every 'progressInterval' queries
-
-        if ((i + 1) % progressInterval === 0) {
-          progressDots += "."; // Add a dot
-          process.stdout.write('\x1b[0G'); // Move cursor to start
-          process.stdout.write(progressDots); // Overwrite
-          process.stdout.write(''); // Try to force flush
+          console.log(`[CLI OUTPUT] ${stdout}`);
+        } catch (err: any) {
+          console.error(`[CLI FAILED]`, err.message);
         }
       }
 
+      console.log('Executing ', totalQueries, 'queries...');
+      
+      await database.transaction(async (trx) => {
+        for (let i = 0; i < totalQueries; i++) {
+          let decodedQuery = decodeSpecialMarkers(queries[i]);
+          decodedQuery = escapeStringLiterals(decodedQuery);
+          try {
+            if (decodedQuery.toLowerCase().startsWith("delete from ")) {
+              data = await deleteViaCli(decodedQuery);
+            } else {
+              data = await trx.raw(decodedQuery, parameters || {});
+            }
+          } catch (e: any) {
+            if (!e.message.match(/SQLITE_CONSTRAINT: UNIQUE constraint failed:.*id$/)) {
+              console.error(`\n[ERROR] Query failed:\n${decodedQuery}\n${e.message}\n`);
+            }
+          }
+        }
+      });
+      
       console.log("\nExecution completed."); // Final message
 
       res.setHeader("Content-Type", "application/json");
