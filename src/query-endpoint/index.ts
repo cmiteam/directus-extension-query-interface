@@ -2,6 +2,7 @@ import { defineEndpoint } from "@directus/extensions-sdk";
 import SqlString from "sqlstring";
 import { exec } from "child_process";
 import { promisify } from "util";
+import zlib from "zlib";
 
 const execAsync = promisify(exec);
 
@@ -33,11 +34,18 @@ export default defineEndpoint((router, { database }) => {
 
     if (!mayProceed) throw new Error("Permission denied");
 
+    function decompressQuery(base64: string): string {
+      const buffer = Buffer.from(base64, 'base64');
+      const result = zlib.inflateSync(buffer).toString('utf-8');
+      return result;
+    }
+    
     try {
       // Execute the query
-      const { query: querySet, parameters } = req.body;
-      if (!querySet) throw new Error("No query specified");
+      const { query: compressedQuery, parameters } = req.body;
+      if (!compressedQuery) throw new Error("No compressedQuery specified");
 
+      const querySet = decompressQuery(compressedQuery);
       const queries = querySet.trim().split(";\n");
       const totalQueries = queries.length;
       console.log(`Executing ${totalQueries} queries...`);

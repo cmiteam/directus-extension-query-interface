@@ -77,6 +77,7 @@ import { inject, ref, computed, type Ref } from 'vue';
 import { useSdk } from '@directus/extensions-sdk';
 import { customEndpoint } from '@directus/sdk';
 import Papa from 'papaparse';
+import pako from 'pako';
 
 const sdk = useSdk();
 
@@ -189,12 +190,13 @@ async function runQuery() {
   }
 
   try {
+    const compressedQuery = compressQuery(query.value);
     const response: any[] = await sdk.request(
       customEndpoint<any[]>({
         path: '/query-endpoint',
         method: 'POST',
         body: JSON.stringify({
-          query: query.value,
+          query: compressedQuery,
           parameters: parametersObject,
         }),
       }),
@@ -213,4 +215,18 @@ async function runQuery() {
     else error.value = e;
   }
 }
+
+function compressQuery(query: string): string {
+  const compressed = pako.deflate(query); // Uint8Array
+  return base64EncodeUint8Array(compressed);
+}
+
+function base64EncodeUint8Array(uint8Array: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i]);
+  }
+  return btoa(binary);
+}
+
 </script>
