@@ -35,11 +35,11 @@ export default defineEndpoint((router, { database }) => {
     if (!mayProceed) throw new Error("Permission denied");
 
     function decompressQuery(base64: string): string {
-      const buffer = Buffer.from(base64, 'base64');
-      const result = zlib.inflateSync(buffer).toString('utf-8');
+      const buffer = Buffer.from(base64, "base64");
+      const result = zlib.inflateSync(buffer).toString("utf-8");
       return result;
     }
-    
+
     try {
       // Execute the query
       const { query: compressedQuery, parameters } = req.body;
@@ -56,16 +56,16 @@ export default defineEndpoint((router, { database }) => {
 
       const escapeStringLiterals = (query: string): string => {
         return query.replace(/'([^']*)'/g, (match, p1) => {
-          const unescapedString = p1.replace(/\\n/g, '\n');
+          const unescapedString = p1.replace(/\\n/g, "\n");
           return SqlString.escape(unescapedString);
         });
       };
 
       // Knex is too slow for bulk deletes, so we use the SQLite CLI
-      const deleteViaCli = async (deleteCommand: string): Promise<void> =>{
-        const dbPath = '/directus/persist/database/eventus.sqlite';
+      const deleteViaCli = async (deleteCommand: string): Promise<void> => {
+        const dbPath = "/directus/persist/database/events.sqlite";
         const command = `sqlite3 ${dbPath} "${deleteCommand}"`;
-      
+
         try {
           const { stdout, stderr } = await execAsync(command);
           if (stderr) {
@@ -75,10 +75,10 @@ export default defineEndpoint((router, { database }) => {
         } catch (err: any) {
           console.error(`[CLI FAILED]`, err.message);
         }
-      }
+      };
 
-      console.log('Executing ', totalQueries, 'queries...');
-      
+      console.log("Executing ", totalQueries, "queries...");
+
       await database.transaction(async (trx) => {
         for (let i = 0; i < totalQueries; i++) {
           let decodedQuery = decodeSpecialMarkers(queries[i]);
@@ -90,13 +90,19 @@ export default defineEndpoint((router, { database }) => {
               data = await trx.raw(decodedQuery, parameters || {});
             }
           } catch (e: any) {
-            if (!e.message.match(/SQLITE_CONSTRAINT: UNIQUE constraint failed:.*id$/)) {
-              console.error(`\n[ERROR] Query failed:\n${decodedQuery}\n${e.message}\n`);
+            if (
+              !e.message.match(
+                /SQLITE_CONSTRAINT: UNIQUE constraint failed:.*id$/
+              )
+            ) {
+              console.error(
+                `\n[ERROR] Query failed:\n${decodedQuery}\n${e.message}\n`
+              );
             }
           }
         }
       });
-      
+
       console.log("\nExecution completed."); // Final message
 
       res.setHeader("Content-Type", "application/json");
