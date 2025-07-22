@@ -46,7 +46,7 @@ export default defineEndpoint((router, { database }) => {
       if (!compressedQuery) throw new Error("No compressedQuery specified");
 
       const querySet = decompressQuery(compressedQuery);
-      const queries = querySet.trim().split(";\n");
+      const queries: string[] = querySet.trim().split(";\n");
       const totalQueries = queries.length;
       console.log(`Executing ${totalQueries} queries...`);
 
@@ -56,11 +56,13 @@ export default defineEndpoint((router, { database }) => {
 
       const escapeStringLiterals = (query: string): string => {
         return query.replace(/'([^']*)'/g, (match, p1) => {
-          const unescapedString = p1.replace(/\\n/g, "\n");
-          return SqlString.escape(unescapedString);
+          // Skip JSON-like strings; they’ll be handled as parameters
+          if (p1.match(/^\[.*\]$/s) || p1.match(/^\{.*\}$/s)) {
+            return match; // Preserve JSON string unchanged
+          }
+          return SqlString.escape(p1); // Escape non-JSON strings
         });
       };
-
       // Knex is too slow for bulk deletes, so we use the SQLite CLI
       const deleteViaCli = async (deleteCommand: string): Promise<void> => {
         const dbPath = "/directus/persist/database/events.sqlite";
@@ -87,10 +89,29 @@ export default defineEndpoint((router, { database }) => {
             if (decodedQuery.toLowerCase().startsWith("delete from ")) {
               data = await deleteViaCli(decodedQuery);
             } else {
-              data = await trx.raw(decodedQuery, parameters || {});
+              // Find all JSON strings in the query
+              const jsonMatches = decodedQuery.matchAll(/'(\[.*?\]|\{.*?\})'/gs);
+              const jsonParams = [];
+              let modifiedQuery = decodedQuery;
+
+              // Replace JSON strings with placeholders
+              for (const match of jsonMatches) {
+                const jsonString = match[1];
+                jsonParams.push(jsonString);
+                modifiedQuery = modifiedQuery.replace(match[0], '?');
+              }
+
+              if (jsonParams.length > 0) {
+                data = await trx.raw(modifiedQuery, jsonParams);
+              } else {
+                modifiedQuery = escapeStringLiterals(decodedQuery);
+                data = await trx.raw(modifiedQuery, parameters || {});
+              }
             }
           } catch (e: any) {
-            if (
+            if (e.code === "SQLITE_MISUSE"){
+              console.log(e.message.replace(/( - )?SQLITE_MISUSE: not an error/g, ""));
+            } else if (
               !e.message.match(
                 /SQLITE_CONSTRAINT: UNIQUE constraint failed:.*id$/
               )
