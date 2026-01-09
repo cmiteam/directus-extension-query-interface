@@ -57,7 +57,7 @@ export default defineEndpoint((router, { database }) => {
       };
       // Knex is too slow for bulk deletes, so we use the SQLite CLI
       const deleteViaCli = async (deleteCommand: string): Promise<void> => {
-        const dbPath = "/directus/persist/database/events.sqlite";
+        const dbPath = "/directus/" + process.env.DB_FILENAME;
         const command = `sqlite3 ${dbPath} "${deleteCommand}"`;
 
         try {
