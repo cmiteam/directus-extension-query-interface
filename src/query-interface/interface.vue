@@ -14,7 +14,11 @@
       </div>
     </div>
 
-    <v-dialog v-model="settingsOpen">
+    <!-- keep-behind: settingsFields is rendered via v-form and can include
+         relational/file/WYSIWYG interfaces that open their own nested
+         dialogs. Without it, this dialog's focus trap outranks theirs and
+         reasserts itself over them, making the nested UI unclickable. -->
+    <v-dialog v-model="settingsOpen" keep-behind>
       <v-card class="allow-drawer">
         <v-card-title>Display Settings</v-card-title>
         <v-card-text>
@@ -221,5 +225,4 @@ function base64EncodeUint8Array(uint8Array: Uint8Array): string {
   }
   return btoa(binary);
 }
-
 </script>
