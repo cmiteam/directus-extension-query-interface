@@ -96,7 +96,22 @@ const settingsFields = [
   },
 ];
 
-function getValue(value: any, type: string) {
+interface QueryField {
+  field?: string;
+  name?: string;
+  type?: string;
+  meta?: { headerWidth?: number; [key: string]: unknown };
+}
+
+interface QueryHeader {
+  text: string;
+  value: string;
+  field: QueryField;
+  width?: number;
+  sortable: boolean;
+}
+
+function getValue(value: any, type?: string) {
   if (type !== 'dateTime' || !value) return value;
   return new Date(value).toISOString().slice(0, 19);
 }
@@ -130,8 +145,8 @@ const headers = computed({
     if (!items.value) return [];
     const responseFields = Object.keys(items?.value?.[0] || {});
 
-    const knownHeaders =
-      props.value?.headers?.fields?.map((field: any) => {
+    const knownHeaders: (QueryHeader | null)[] =
+      props.value?.headers?.fields?.map((field: QueryField) => {
         if (!field.field) return null;
         if (!responseFields.includes(field.field)) return null;
 
@@ -144,14 +159,14 @@ const headers = computed({
         };
       }) || [];
 
-    return knownHeaders.filter(Boolean);
+    return knownHeaders.filter((header) => header !== null);
   },
-  set: (updatedHeaders) => {
+  set: (updatedHeaders: QueryHeader[]) => {
     for (const header of updatedHeaders) {
       if (header?.field?.meta) header.field.meta.headerWidth = header.width;
     }
 
-    props.value.headers.fields.sort((a, b) => {
+    props.value.headers.fields.sort((a: QueryField, b: QueryField) => {
       return (
         updatedHeaders.findIndex((h) => h.value === a.field) -
         updatedHeaders.findIndex((h) => h.value === b.field)
@@ -207,7 +222,7 @@ async function runQuery() {
     items.value = response;
 
     for (const field of Object.keys(response?.[0] || {})) {
-      if (!props?.value?.headers?.fields?.find((f) => f.field === field)) {
+      if (!props?.value?.headers?.fields?.find((f: QueryField) => f.field === field)) {
         props.value.headers.fields.push({ field, meta: { field } });
       }
       emit('input', props.value);

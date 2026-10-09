@@ -7,29 +7,10 @@ const execAsync = promisify(exec);
 
 export default defineEndpoint((router, { database }) => {
   router.post("/", async (req, res) => {
-    // Do not allow the user to execute queries unless they are an admin or have CRUD permissions on the query table.
-    let mayProceed = req?.accountability?.admin || false;
-
-    if (!mayProceed && req?.accountability?.permissions) {
-      const permissions = req?.accountability?.permissions;
-
-      const mayCreate = permissions.some(
-        (p) => p.collection === "query" && p.action === "create"
-      );
-      const mayRead = permissions.some(
-        (p) => p.collection === "query" && p.action === "read"
-      );
-
-      const mayUpdate = permissions.some(
-        (p) => p.collection === "query" && p.action === "update"
-      );
-
-      const mayDelete = permissions.some(
-        (p) => p.collection === "query" && p.action === "delete"
-      );
-
-      mayProceed = mayCreate && mayRead && mayUpdate && mayDelete;
-    }
+    // Only admins may run queries. This used to also let users with full CRUD
+    // on the query collection through, but Directus 11 dropped
+    // accountability.permissions, so that check could never pass.
+    const mayProceed = req.accountability?.admin || false;
 
     if (!mayProceed) throw new Error("Permission denied");
 
